@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC-EUR Trading Bot & Cloud Costs Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-serif; }
+        .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.875rem; }
+        th { background-color: #0f172a; color: #94a3b8; font-weight: 600; padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background-color: #33415555; }
+        .badge-profit { color: #4ade80; font-weight: 600; }
+        .badge-loss { color: #f87171; font-weight: 600; }
+        .badge-flat { color: #94a3b8; font-weight: 600; }
+    </style>
+</head>
+<body class="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-6xl mx-auto space-y-8">
+        
+        <!-- Header: Percentage-only metrics -->
+        <header class="card flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                    <span>📊</span> BTC-EUR Bot Dashboard
+                </h1>
+                <p class="text-xs text-slate-400 mt-1">Autonomous trading simulator & infrastructure metrics</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-4 text-sm">
+                <div class="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span class="text-slate-400 text-xs block">Total Return</span>
+                    <span id="hdr-net-pct" class="font-bold text-base">0.00%</span>
+                </div>
+                <div class="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span class="text-slate-400 text-xs block">Cash Allocation</span>
+                    <span id="hdr-cash-pct" class="font-semibold">0.00%</span>
+                </div>
+                <div class="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span class="text-slate-400 text-xs block">BTC Allocation</span>
+                    <span id="hdr-btc-pct" class="font-semibold">0.00%</span>
+                </div>
+                <div class="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span class="text-slate-400 text-xs block">Bot Mode</span>
+                    <span id="hdr-bot-mode" class="font-semibold text-emerald-400">DRY_RUN</span>
+                </div>
+                <div class="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span class="text-slate-400 text-xs block">Last Updated (UTC)</span>
+                    <span id="hdr-last-updated" class="font-mono text-xs text-slate-300">-</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Global Month Selector Bar for Sections 1 & 2 -->
+        <div class="card flex items-center justify-between py-4 px-6 bg-slate-800/80">
+            <span class="text-sm font-medium text-slate-300">📅 Select Month for Sections 1 & 2:</span>
+            <select id="month-selector" class="bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+            </select>
+        </div>
+
+        <!-- Section 1: Buys & Sells -->
+        <section class="card space-y-4">
+            <h2 id="sec1-title" class="text-lg font-semibold text-white">1. Buys & Sells</h2>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time (UTC)</th>
+                            <th>Mode</th>
+                            <th>Side</th>
+                            <th>Price (EUR)</th>
+                            <th>Size (BTC)</th>
+                            <th>Value (EUR)</th>
+                            <th>Fee (EUR)</th>
+                            <th>Realized P&L (EUR)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trades-tbody">
+                    </tbody>
+                </table>
+            </div>
+            <div id="trades-empty" class="text-slate-400 text-sm py-4 text-center hidden">No trade entries recorded for this month.</div>
+        </section>
+
+        <!-- Section 2: Month Daily P&L -->
+        <section class="card space-y-4">
+            <h2 id="sec2-title" class="text-lg font-semibold text-white">2. Month Daily P&L</h2>
+            <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 lg:grid-cols-11 gap-2" id="daily-pillars">
+            </div>
+        </section>
+
+        <!-- Section 3: P&L Performance -->
+        <section class="card space-y-4">
+            <h2 class="text-lg font-semibold text-white">3. Profit / Loss Performance (Day, Week, Month, Year)</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="period-cards">
+            </div>
+        </section>
+
+        <!-- Section 4: Cloud Costs -->
+        <section class="card space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-white">4. Cloud Costs (Day, Week, Month, Year)</h2>
+                <span id="cost-note" class="text-xs text-slate-400"></span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="cost-cards">
+            </div>
+        </section>
+
+        <!-- Section 5: Hourly Bot Cycles -->
+        <section class="card space-y-4">
+            <h2 class="text-lg font-semibold text-white">5. Hourly Bot Cycles (Last 12)</h2>
+            <div id="latest-cycle-caption" class="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-lg border border-slate-800"></div>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time (UTC)</th>
+                            <th>Action</th>
+                            <th>Reason</th>
+                            <th>Spot (EUR)</th>
+                            <th>Chg</th>
+                            <th>RSI</th>
+                            <th>SMA20</th>
+                            <th>BB Low</th>
+                            <th>BB Trigger</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cycles-tbody">
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="text-center text-xs text-slate-500 py-4">
+            Generated static dashboard &bull; BTC-EUR Trading Bot
+        </footer>
+    </div>
+
+    <script>
+        const dashboardData = {"available_months": ["2026-11"], "default_month": "2026-11", "portfolio": {"net_pct": 2.86, "cash_pct": 37.61, "btc_pct": 62.39}, "bot_mode": "DRY_RUN", "last_updated_utc": "2026-11-26 11:42:23 UTC", "trades_by_month": {"2026-11": [{"time_utc": "2026-11-25T12:09:30", "mode": "DRY_RUN", "side": "BUY", "price_eur": 53412.28, "size_btc": 0.00032764, "value_eur": 17.5, "fee_eur": 0.0, "pnl_eur": null}, {"time_utc": "2026-11-25T08:09:24", "mode": "DRY_RUN", "side": "BUY", "price_eur": 53733.12, "size_btc": 0.00032568, "value_eur": 17.5, "fee_eur": 0.0, "pnl_eur": null}, {"time_utc": "2026-11-24T11:08:52", "mode": "DRY_RUN", "side": "BUY", "price_eur": 54537.06, "size_btc": 0.00032088, "value_eur": 17.5, "fee_eur": 0.0, "pnl_eur": null}, {"time_utc": "2026-11-24T08:05:57", "mode": "DRY_RUN", "side": "SELL", "price_eur": 55427.7, "size_btc": 0.00032407, "value_eur": 17.96, "fee_eur": 0.0, "pnl_eur": 0.64}, {"time_utc": "2026-11-24T08:05:57", "mode": "DRY_RUN", "side": "BUY", "price_eur": 54072.95, "size_btc": 0.00032364, "value_eur": 17.5, "fee_eur": 0.0, "pnl_eur": null}, {"time_utc": "2026-11-23T22:40:29", "mode": "LIVE", "side": "BUY", "price_eur": 53303.86, "size_btc": 0.00028141, "value_eur": 15.0, "fee_eur": 0.0, "pnl_eur": null}, {"time_utc": "2026-11-23T22:34:51", "mode": "DRY_RUN", "side": "SELL", "price_eur": 57615.0, "size_btc": 0.00026785, "value_eur": 15.43, "fee_eur": 0.0, "pnl_eur": 0.66}, {"time_utc": "2026-11-23T22:34:50", "mode": "DRY_RUN", "side": "BUY", "price_eur": 53532.72, "size_btc": 0.0002802, "value_eur": 15.0, "fee_eur": 0.0, "pnl_eur": null}, {"time_utc": "2026-11-23T22:31:32", "mode": "DRY_RUN", "side": "SELL", "price_eur": 57615.0, "size_btc": 0.00017857, "value_eur": 10.29, "fee_eur": 0.0, "pnl_eur": 0.3}, {"time_utc": "2026-11-23T22:21:05", "mode": "DRY_RUN", "side": "BUY", "price_eur": 55928.98, "size_btc": 0.0001788, "value_eur": 10.0, "fee_eur": 0.0, "pnl_eur": null}, {"time_utc": "2026-11-23T22:19:47", "mode": "DRY_RUN", "side": "BUY", "price_eur": 55928.98, "size_btc": 0.0001788, "value_eur": 10.0, "fee_eur": 0.0, "pnl_eur": null}]}, "month_dfs": {"2026-11": [{"day": "01", "date": "2026-11-01", "pnl_eur": 0.0, "result": "Flat"}, {"day": "02", "date": "2026-11-02", "pnl_eur": 0.0, "result": "Flat"}, {"day": "03", "date": "2026-11-03", "pnl_eur": 0.0, "result": "Flat"}, {"day": "04", "date": "2026-11-04", "pnl_eur": 0.0, "result": "Flat"}, {"day": "05", "date": "2026-11-05", "pnl_eur": 0.0, "result": "Flat"}, {"day": "06", "date": "2026-11-06", "pnl_eur": 0.0, "result": "Flat"}, {"day": "07", "date": "2026-11-07", "pnl_eur": 0.0, "result": "Flat"}, {"day": "08", "date": "2026-11-08", "pnl_eur": 0.0, "result": "Flat"}, {"day": "09", "date": "2026-11-09", "pnl_eur": 0.0, "result": "Flat"}, {"day": "10", "date": "2026-11-10", "pnl_eur": 0.0, "result": "Flat"}, {"day": "11", "date": "2026-11-11", "pnl_eur": 0.0, "result": "Flat"}, {"day": "12", "date": "2026-11-12", "pnl_eur": 0.0, "result": "Flat"}, {"day": "13", "date": "2026-11-13", "pnl_eur": 0.0, "result": "Flat"}, {"day": "14", "date": "2026-11-14", "pnl_eur": 0.0, "result": "Flat"}, {"day": "15", "date": "2026-11-15", "pnl_eur": 0.0, "result": "Flat"}, {"day": "16", "date": "2026-11-16", "pnl_eur": 0.0, "result": "Flat"}, {"day": "17", "date": "2026-11-17", "pnl_eur": 0.0, "result": "Flat"}, {"day": "18", "date": "2026-11-18", "pnl_eur": 0.0, "result": "Flat"}, {"day": "19", "date": "2026-11-19", "pnl_eur": 0.0, "result": "Flat"}, {"day": "20", "date": "2026-11-20", "pnl_eur": 0.0, "result": "Flat"}, {"day": "21", "date": "2026-11-21", "pnl_eur": 0.0, "result": "Flat"}, {"day": "22", "date": "2026-11-22", "pnl_eur": 0.0, "result": "Flat"}, {"day": "23", "date": "2026-11-23", "pnl_eur": 0.97, "result": "Profit"}, {"day": "24", "date": "2026-11-24", "pnl_eur": 0.64, "result": "Profit"}, {"day": "25", "date": "2026-11-25", "pnl_eur": 0.0, "result": "Flat"}, {"day": "26", "date": "2026-11-26", "pnl_eur": 0.0, "result": "Flat"}, {"day": "27", "date": "2026-11-27", "pnl_eur": 0.0, "result": "Flat"}, {"day": "28", "date": "2026-11-28", "pnl_eur": 0.0, "result": "Flat"}, {"day": "29", "date": "2026-11-29", "pnl_eur": 0.0, "result": "Flat"}, {"day": "30", "date": "2026-11-30", "pnl_eur": 0.0, "result": "Flat"}]}, "period_data": [{"period": "Day", "pnl_eur": 0.0, "result": "Flat"}, {"period": "Week", "pnl_eur": 1.61, "result": "Profit"}, {"period": "Month", "pnl_eur": 1.61, "result": "Profit"}, {"period": "Year", "pnl_eur": 1.61, "result": "Profit"}], "costs": {"Day": 0.0, "Week": 0.0, "Month": 0.0, "Year": 0.0}, "cost_note": "BigQuery pending (ModuleNotFoundError; 0.00 shown)", "cycles": [{"time_utc": "2026-11-26T11:10:05", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55081.64, "spot_chg": "\u25bc", "rsi": 55.07, "sma20": 54965.22, "bb_low": 53894.31, "bb_trigger_eur": 54271.57}, {"time_utc": "2026-11-26T10:10:03", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55467.83, "spot_chg": "\u25b2", "rsi": 63.17, "sma20": 54892.56, "bb_low": 53564.24, "bb_trigger_eur": 53939.19}, {"time_utc": "2026-11-26T09:10:01", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55385.2, "spot_chg": "\u25b2", "rsi": 66.56, "sma20": 54772.91, "bb_low": 53285.07, "bb_trigger_eur": 53658.07}, {"time_utc": "2026-11-26T08:10:00", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55224.94, "spot_chg": "\u25b2", "rsi": 67.42, "sma20": 54643.21, "bb_low": 53023.44, "bb_trigger_eur": 53394.6}, {"time_utc": "2026-11-26T07:09:58", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55050.43, "spot_chg": "\u25bc", "rsi": 66.22, "sma20": 54560.47, "bb_low": 52908.13, "bb_trigger_eur": 53278.49}, {"time_utc": "2026-11-26T06:09:57", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55211.79, "spot_chg": "\u25bc", "rsi": 78.39, "sma20": 54487.97, "bb_low": 52792.83, "bb_trigger_eur": 53162.38}, {"time_utc": "2026-11-26T05:09:56", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55554.27, "spot_chg": "\u25b2", "rsi": 87.75, "sma20": 54422.98, "bb_low": 52718.76, "bb_trigger_eur": 53087.79}, {"time_utc": "2026-11-26T04:09:54", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55526.72, "spot_chg": "\u25b2", "rsi": 88.71, "sma20": 54338.76, "bb_low": 52713.34, "bb_trigger_eur": 53082.33}, {"time_utc": "2026-11-26T03:09:53", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55285.99, "spot_chg": "\u25bc", "rsi": 88.14, "sma20": 54270.19, "bb_low": 52752.09, "bb_trigger_eur": 53121.35}, {"time_utc": "2026-11-26T02:09:51", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55366.79, "spot_chg": "\u25b2", "rsi": 75.24, "sma20": 54192.35, "bb_low": 52715.58, "bb_trigger_eur": 53084.59}, {"time_utc": "2026-11-26T01:09:49", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55173.41, "spot_chg": "\u25b2", "rsi": 75.12, "sma20": 54116.5, "bb_low": 52785.05, "bb_trigger_eur": 53154.55}, {"time_utc": "2026-11-26T00:09:48", "action": "HOLD", "reason": "No entry trigger", "spot_eur": 55088.04, "spot_chg": "", "rsi": 69.48, "sma20": 54055.27, "bb_low": 52823.31, "bb_trigger_eur": 53193.07}]};
+
+        function initDashboard() {
+            // Top Header Metrics
+            const port = dashboardData.portfolio;
+            const netEl = document.getElementById('hdr-net-pct');
+            netEl.textContent = (port.net_pct >= 0 ? '+' : '') + port.net_pct.toFixed(2) + '%';
+            netEl.className = 'font-bold text-base ' + (port.net_pct >= 0 ? 'text-emerald-400' : 'text-red-400');
+
+            document.getElementById('hdr-cash-pct').textContent = port.cash_pct.toFixed(2) + '%';
+            document.getElementById('hdr-btc-pct').textContent = port.btc_pct.toFixed(2) + '%';
+            
+            const modeEl = document.getElementById('hdr-bot-mode');
+            modeEl.textContent = dashboardData.bot_mode;
+            modeEl.className = 'font-semibold ' + (dashboardData.bot_mode === 'LIVE' ? 'text-amber-400' : 'text-emerald-400');
+
+            document.getElementById('hdr-last-updated').textContent = dashboardData.last_updated_utc;
+
+            // Month Selector
+            const selector = document.getElementById('month-selector');
+            dashboardData.available_months.forEach(ym => {
+                const opt = document.createElement('option');
+                opt.value = ym;
+                opt.textContent = ym;
+                if (ym === dashboardData.default_month) opt.selected = true;
+                selector.appendChild(opt);
+            });
+
+            selector.addEventListener('change', (e) => {
+                renderSections1And2(e.target.value);
+            });
+
+            renderSections1And2(dashboardData.default_month);
+            renderSection3();
+            renderSection4();
+            renderSection5();
+        }
+
+        function renderSections1And2(ym) {
+            // Section 1
+            document.getElementById('sec1-title').textContent = `1. Buys & Sells (${ym})`;
+            const trades = dashboardData.trades_by_month[ym] || [];
+            const tbody = document.getElementById('trades-tbody');
+            const emptyEl = document.getElementById('trades-empty');
+            tbody.innerHTML = '';
+
+            if (trades.length === 0) {
+                emptyEl.classList.remove('hidden');
+            } else {
+                emptyEl.classList.add('hidden');
+                trades.forEach(t => {
+                    const tr = document.createElement('tr');
+                    const sideColor = t.side === 'BUY' ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold';
+                    const pnlStr = t.pnl_eur !== null ? (t.pnl_eur >= 0 ? '+' + t.pnl_eur.toFixed(2) : t.pnl_eur.toFixed(2)) + ' €' : '-';
+                    const pnlClass = t.pnl_eur !== null ? (t.pnl_eur >= 0 ? 'badge-profit' : 'badge-loss') : 'text-slate-400';
+
+                    tr.innerHTML = `
+                        <td class="font-mono text-xs text-slate-300">${t.time_utc}</td>
+                        <td>${t.mode}</td>
+                        <td class="${sideColor}">${t.side}</td>
+                        <td>€${t.price_eur.toFixed(2)}</td>
+                        <td>${t.size_btc.toFixed(6)} BTC</td>
+                        <td>€${t.value_eur.toFixed(2)}</td>
+                        <td>€${t.fee_eur.toFixed(4)}</td>
+                        <td class="${pnlClass}">${pnlStr}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // Section 2: Daily Pillars
+            document.getElementById('sec2-title').textContent = `2. Month Daily P&L (${ym})`;
+            const dailyData = dashboardData.month_dfs[ym] || [];
+            const pillarsContainer = document.getElementById('daily-pillars');
+            pillarsContainer.innerHTML = '';
+
+            dailyData.forEach(d => {
+                const box = document.createElement('div');
+                const isProf = d.pnl_eur > 0;
+                const isLoss = d.pnl_eur < 0;
+                const bgCol = isProf ? 'bg-emerald-950/60 border-emerald-800' : (isLoss ? 'bg-red-950/60 border-red-800' : 'bg-slate-900 border-slate-700');
+                const txtCol = isProf ? 'text-emerald-400' : (isLoss ? 'text-red-400' : 'text-slate-400');
+
+                box.className = `p-3 rounded-lg border ${bgCol} flex flex-col items-center justify-between text-center`;
+                box.innerHTML = `
+                    <span class="text-xs text-slate-400 font-medium">Day ${d.day}</span>
+                    <span class="text-sm font-bold ${txtCol} my-1">${d.pnl_eur >= 0 ? '+' : ''}€${d.pnl_eur.toFixed(2)}</span>
+                    <span class="text-[10px] text-slate-500 uppercase">${d.result}</span>
+                `;
+                pillarsContainer.appendChild(box);
+            });
+        }
+
+        function renderSection3() {
+            const container = document.getElementById('period-cards');
+            container.innerHTML = '';
+            dashboardData.period_data.forEach(p => {
+                const isProf = p.pnl_eur > 0;
+                const isLoss = p.pnl_eur < 0;
+                const bgCol = isProf ? 'bg-emerald-950/40 border-emerald-800' : (isLoss ? 'bg-red-950/40 border-red-800' : 'bg-slate-900 border-slate-700');
+                const txtCol = isProf ? 'text-emerald-400' : (isLoss ? 'text-red-400' : 'text-slate-400');
+
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-xl border ${bgCol} flex flex-col justify-between`;
+                card.innerHTML = `
+                    <div>
+                        <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider">${p.period}</span>
+                        <div class="text-xl font-bold ${txtCol} mt-1">${p.pnl_eur >= 0 ? '+' : ''}€${p.pnl_eur.toFixed(2)}</div>
+                    </div>
+                    <div class="mt-3 flex justify-between items-center text-xs">
+                        <span class="text-slate-400">Status</span>
+                        <span class="font-semibold ${txtCol}">${p.result}</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderSection4() {
+            document.getElementById('cost-note').textContent = dashboardData.cost_note;
+            const container = document.getElementById('cost-cards');
+            container.innerHTML = '';
+            const costs = dashboardData.costs;
+            ['Day', 'Week', 'Month', 'Year'].forEach(per => {
+                const card = document.createElement('div');
+                card.className = 'bg-slate-900 border border-slate-800 p-4 rounded-xl';
+                card.innerHTML = `
+                    <span class="text-xs text-slate-400 font-medium">${per}</span>
+                    <div class="text-xl font-bold text-white mt-1">€${costs[per].toFixed(2)}</div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderSection5() {
+            const cycles = dashboardData.cycles;
+            if (cycles.length > 0) {
+                const latest = cycles[0];
+                const chgSymbol = latest.spot_chg || '';
+                const chgColor = chgSymbol === '▲' ? 'text-emerald-400' : (chgSymbol === '▼' ? 'text-red-400' : 'text-slate-300');
+                document.getElementById('latest-cycle-caption').innerHTML = `
+                    Latest (${latest.time_utc} UTC) &mdash; Spot: <span class="${chgColor}">€${latest.spot_eur !== null ? latest.spot_eur.toFixed(2) : '-'} ${chgSymbol}</span> | ${latest.reason}
+                `;
+            } else {
+                document.getElementById('latest-cycle-caption').textContent = 'No BOT_CYCLE entries recorded yet.';
+            }
+
+            const tbody = document.getElementById('cycles-tbody');
+            tbody.innerHTML = '';
+            cycles.forEach(c => {
+                const tr = document.createElement('tr');
+                const chgClass = c.spot_chg === '▲' ? 'text-emerald-400 font-bold text-base' : (c.spot_chg === '▼' ? 'text-red-400 font-bold text-base' : 'text-slate-400');
+                tr.innerHTML = `
+                    <td class="font-mono text-xs text-slate-300">${c.time_utc}</td>
+                    <td><span class="px-2 py-0.5 rounded text-xs bg-slate-800 font-mono">${c.action || '-'}</span></td>
+                    <td class="text-slate-300 text-xs">${c.reason || '-'}</td>
+                    <td>${c.spot_eur !== null ? '€' + c.spot_eur.toFixed(2) : '-'}</td>
+                    <td class="${chgClass}">${c.spot_chg}</td>
+                    <td>${c.rsi !== null ? c.rsi.toFixed(2) : '-'}</td>
+                    <td>${c.sma20 !== null ? '€' + c.sma20.toFixed(2) : '-'}</td>
+                    <td>${c.bb_low !== null ? '€' + c.bb_low.toFixed(2) : '-'}</td>
+                    <td>${c.bb_trigger_eur !== null ? '€' + c.bb_trigger_eur.toFixed(2) : '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
